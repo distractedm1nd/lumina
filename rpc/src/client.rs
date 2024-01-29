@@ -152,5 +152,86 @@ mod native {
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-    // TODO: implement HttpClient with `fetch`
+    use std::fmt;
+    use std::result::Result as StdResult;
+
+    use crate::Result;
+    use async_trait::async_trait;
+    use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
+    use jsonrpsee::core::params::BatchRequestBuilder;
+    use jsonrpsee::core::traits::ToRpcParams;
+    use jsonrpsee::core::Error as JrpcError;
+    use jsonrpsee::wasm_client::{Client, WasmClientBuilder};
+    use serde::de::DeserializeOwned;
+
+    pub struct WasmClient {
+        client: Client,
+    }
+
+    impl WasmClient {
+        pub async fn new(_conn_str: &str) -> Result<Self> {
+            let client = WasmClientBuilder::default().build(_conn_str).await?;
+            Ok(WasmClient { client })
+        }
+    }
+
+    #[async_trait]
+    impl ClientT for WasmClient {
+        async fn notification<Params>(
+            &self,
+            method: &str,
+            params: Params,
+        ) -> StdResult<(), JrpcError>
+        where
+            Params: ToRpcParams + Send,
+        {
+            self.client.notification(method, params).await
+        }
+
+        async fn request<R, Params>(&self, method: &str, params: Params) -> StdResult<R, JrpcError>
+        where
+            R: DeserializeOwned,
+            Params: ToRpcParams + Send,
+        {
+            self.client.request(method, params).await
+        }
+
+        async fn batch_request<'a, R>(
+            &self,
+            batch: BatchRequestBuilder<'a>,
+        ) -> StdResult<BatchResponse<'a, R>, JrpcError>
+        where
+            R: DeserializeOwned + fmt::Debug + 'a,
+        {
+            self.client.batch_request(batch).await
+        }
+    }
+
+    #[async_trait]
+    impl SubscriptionClientT for WasmClient {
+        async fn subscribe<'a, N, Params>(
+            &self,
+            subscribe_method: &'a str,
+            params: Params,
+            unsubscribe_method: &'a str,
+        ) -> StdResult<Subscription<N>, JrpcError>
+        where
+            Params: ToRpcParams + Send,
+            N: DeserializeOwned,
+        {
+            self.client
+                .subscribe(subscribe_method, params, unsubscribe_method)
+                .await
+        }
+
+        async fn subscribe_to_method<'a, N>(
+            &self,
+            method: &'a str,
+        ) -> StdResult<Subscription<N>, JrpcError>
+        where
+            N: DeserializeOwned,
+        {
+            self.client.subscribe_to_method(method).await
+        }
+    }
 }
